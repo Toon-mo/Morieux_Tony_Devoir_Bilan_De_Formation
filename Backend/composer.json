@@ -1,0 +1,19 @@
+{
+    "name": "morieuxtony/backend",
+    "autoload": {
+        "psr-4": {
+            "Morieuxtony\\Backend\\": "src/",
+            "Config\\": "Config/",
+            "Models\\": "Models/",
+            "Controllers\\": "Controllers/"
+            
+        }
+    },
+    "authors": [
+        {
+            "name": "MorieuxTony",
+            "email": "tmorieux@gmail.com"
+        }
+    ],
+    "require": {}
+}
