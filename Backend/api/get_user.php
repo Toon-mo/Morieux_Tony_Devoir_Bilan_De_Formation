@@ -105,15 +105,54 @@ switch ($_SERVER['REQUEST_METHOD']) {
         $controller->register();
         break;
 
-    /*
     case 'PUT':
-        // [PUT] Mise à jour d’un utilisateur
+        /**
+         * [PUT] Mise à jour d'un utilisateur
+         * 
+         * Test Postman :
+         * -Méthode : Put
+         * - URL : /api/users?id=1
+         * - Body JSON :
+         * {
+         * "username" : "NewName",
+         * "email": "newmail@mail.com"
+         * }
+         * 
+         * Réponses :
+         * - 200 : utilisateur mis à jour
+         * - 400 : données invalides
+         * - 404 : utilisateur non trouvé
+         * - 500 : erreur serveur
+         */
+        $id = $_GET['id'] ?? null;
+        if ($id) {
+            $controller->updateUser($id);
+        } else {
+            http_response_code(400);
+            echo json_encode(["message" => "ID de l'utilisateur manquant"]);
+        }
         break;
 
     case 'DELETE':
-        // [DELETE] Suppression d’un utilisateur
+        /**
+         * [DELETE] Supprimer un utilisateur
+         *
+         * Test Postman :
+         * - Méthode : DELETE
+         * - URL : /api/users?id=1
+         *
+         * Réponse :
+         * - 200 : utilisateur supprimé
+         * - 404 : utilisateur non trouvé
+         */
+        $id = $_GET['id'] ?? null;
+        if ($id) {
+            $controller->deleteUser($id);
+        } else {
+            http_response_code(400);
+            echo json_encode(["message" => "ID de l'utilisateur manquant"]);
+        }
         break;
-    */
 
     default:
         // Méthode HTTP non autorisée
