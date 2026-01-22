@@ -19,7 +19,7 @@ class UserController
 {
     /**
      * Instance du modèle utilisateur
-     */
+     *//api/users.php
     private $model;
 
     /**
@@ -197,7 +197,7 @@ class UserController
      *
      * Test Postman :
      * - Méthode : GET
-     * - URL : /api/users?id=1
+     * - )
      *
      * @param int $id
      */
