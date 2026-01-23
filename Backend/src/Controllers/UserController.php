@@ -19,7 +19,8 @@ class UserController
 {
     /**
      * Instance du modèle utilisateur
-     *//api/users.php
+     * /api/users.php
+     */
     private $model;
 
     /**
