@@ -2,10 +2,9 @@
     "name": "morieuxtony/backend",
     "autoload": {
         "psr-4": {
-            "Morieuxtony\\Backend\\": "src/",
-            "Config\\": "Config/",
-            "Models\\": "Models/",
-            "Controllers\\": "Controllers/"
+            "Config\\": "src/Config/",
+            "Models\\": "src/Models/",
+            "Controllers\\": "src/Controllers/"
             
         }
     },
@@ -15,5 +14,7 @@
             "email": "tmorieux@gmail.com"
         }
     ],
-    "require": {}
+    "require": {
+        "vlucas/phpdotenv": "^5.6"    
+    }
 }
