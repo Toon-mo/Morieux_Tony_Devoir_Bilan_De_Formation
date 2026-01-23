@@ -2,90 +2,92 @@
 
 namespace Config;
 
+// Import des classes globales PHP
 use PDO;
 use PDOException;
 
+// Chargement de l'autoloader Composer (Dotenv)
+require_once __DIR__ . '/../../vendor/autoload.php';
+
 /**
- * Classe Database
+ * Database
  *
  * Rôle :
- * - Gérer la connexion à la base de données MySQL
- * - Fournir un objet PDO prêt à l'emploi pour les controllers et models
+ * - Centraliser la connexion à la base de données
+ * - Charger les variables d’environnement via Dotenv
+ * - Retourner une instance PDO sécurisée
  *
  * Architecture :
- * Postman / Front → Controller → Model → Database (PDO) → MySQL
- *
- * Bonnes pratiques :
- * - Encodage UTF-8 pour les accents
- * - Gestion des erreurs avec exceptions
- * - Objet PDO réutilisable
+ * Controllers / Models → Database → PDO → MySQL
  */
 class Database
 {
     /**
-     * Hôte de la base de données
-     * @var string
+     * Paramètres de connexion
      */
-    private $host = "localhost";
+    private string $host;
+    private string $db_name;
+    private string $username;
+    private string $password;
 
     /**
-     * Nom de la base de données
-     * @var string
+     * Instance PDO
      */
-    private $db_name = "forum_gravure_laser";
+    public ?PDO $conn = null;
 
     /**
-     * Nom d'utilisateur MySQL
-     * @var string
-     */
-    private $username = "root";
-
-    /**
-     * Mot de passe MySQL
-     * @var string
-     */
-    private $password = "";
-
-    /**
-     * Objet PDO de connexion
-     * @var PDO|null
-     */
-    public $conn;
-
-    /**
-     * Récupérer la connexion PDO
+     * Constructeur
      *
-     * Usage :
-     * $database = new Database();
-     * $db = $database->getConnection();
+     * Fonctionnement :
+     * - Charge le fichier .env à la racine du projet
+     * - Initialise les paramètres de connexion
+     * - Définit des valeurs par défaut si les variables ne sont pas présentes
+     */
+    public function __construct()
+    {
+        // Chargement des variables d'environnement (.env)
+        $dotenv = \Dotenv\Dotenv::createImmutable(__DIR__ . '/../../');
+        $dotenv->load();
+
+        // Initialisation des paramètres avec fallback
+        // L’opérateur ?? permet d’éviter une erreur si la variable n’existe pas
+        $this->host     = $_ENV['DB_HOST'] ?? 'localhost';
+        $this->db_name  = $_ENV['DB_NAME'] ?? '';
+        $this->username = $_ENV['DB_USER'] ?? 'root';
+        $this->password = $_ENV['DB_PASS'] ?? '';
+    }
+
+    /**
+     * Obtenir la connexion à la base de données
      *
      * @return PDO|null
+     *
+     * Comportement :
+     * - Crée une connexion PDO
+     * - Force l'encodage UTF-8
+     * - Active les exceptions PDO
+     * - Retourne null en cas d’échec
      */
-    public function getConnection()
+    public function getConnection(): ?PDO
     {
-        $this->conn = null;
-
         try {
-            // Création de la connexion PDO
             $this->conn = new PDO(
-                "mysql:host=" . $this->host . ";dbname=" . $this->db_name,
+                "mysql:host={$this->host};dbname={$this->db_name}",
                 $this->username,
                 $this->password
             );
 
-            // On force l'encodage en UTF-8 pour éviter les problèmes d'accents
-            $this->conn->exec("set names utf8");
+            // Encodage UTF-8 pour éviter les problèmes d'accents
+            $this->conn->exec("SET NAMES utf8");
 
-            // Mode d'erreur : Exceptions PDO
+            // Mode erreur : exceptions (indispensable pour debug et API)
             $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        } catch (PDOException $exception) {
-            // Gestion des erreurs de connexion
-            echo json_encode([
-                "success" => false,
-                "message" => "Erreur de connexion à la base de données : " . $exception->getMessage()
-            ]);
-        }
 
-        return $this->conn;
+            return $this->conn;
+        } catch (PDOException $exception) {
+            // Message clair pour le debug (à désactiver en production)
+            echo "Erreur de connexion à la base de données : " . $exception->getMessage();
+            return null;
+        }
     }
 }
