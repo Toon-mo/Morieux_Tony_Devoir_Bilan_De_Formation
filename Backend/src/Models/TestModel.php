@@ -9,7 +9,7 @@ use PDO;
  *
  * Rôle :
  * - Gérer toutes les opérations CRUD liées aux tests de gravure laser
- * - Centraliser l’accès aux tables `tests` et `parameters`
+ * - Centraliser l'accès aux tables `tests` et `parameters`
  * - Fournir les données aux contrôleurs appelés par Postman
  *
  * Architecture :
@@ -19,11 +19,13 @@ class TestModel
 {
     /**
      * Connexion PDO
+     * @var PDO
      */
     private $conn;
 
     /**
      * Nom de la table principale
+     * @var string
      */
     private $table_name = "tests";
 
@@ -32,7 +34,7 @@ class TestModel
      *
      * @param PDO $db Connexion injectée depuis Database
      */
-    public function __construct($db)
+    public function __construct(PDO $db)
     {
         $this->conn = $db;
     }
@@ -44,18 +46,9 @@ class TestModel
     /**
      * Récupérer la liste simplifiée des tests (page Home)
      *
-     * Test Postman :
-     * - Méthode : GET
-     * - URL : /api/tests
-     *
-     * Données retournées :
-     * - ID du test
-     * - Titre
-     * - Image
-     * - Machine
-     * - Matériau
+     * @return array
      */
-    public function getAllTests()
+    public function getAllTests(): array
     {
         $query = "
             SELECT 
@@ -73,24 +66,16 @@ class TestModel
         $stmt = $this->conn->prepare($query);
         $stmt->execute();
 
-        // Retourne une liste de tests (tableau associatif)
-        // Sera transformée en JSON pour Postman
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
-     * Récupérer le détail complet d’un test (page Détail)
+     * Récupérer le détail complet d'un test (page Détail)
      *
-     * Test Postman :
-     * - Méthode : GET
-     * - URL : /api/tests/{id}
-     *
-     * Données retournées :
-     * - Informations du test
-     * - Machine, matériau, auteur
-     * - Paramètres de gravure
+     * @param int $id
+     * @return array|false
      */
-    public function getTestDetails($id)
+    public function getTestDetails(int $id)
     {
         $query = "
             SELECT 
@@ -111,14 +96,11 @@ class TestModel
             LEFT JOIN users u ON t.user_id = u.user_id
             LEFT JOIN parameters p ON t.test_id = p.test_id
             WHERE t.test_id = :id
-            LIMIT 0,1
+            LIMIT 1
         ";
 
         $stmt = $this->conn->prepare($query);
-
-        // Liaison sécurisée du paramètre ID
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-
         $stmt->execute();
 
         return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -131,40 +113,15 @@ class TestModel
     /**
      * Créer un nouveau test avec ses paramètres
      *
-     * Test Postman :
-     * - Méthode : POST
-     * - URL : /api/tests
-     * - Body (JSON) :
-     *   {
-     *     "title": "Test inox 60W",
-     *     "image": "test.jpg",
-     *     "machine_id": 1,
-     *     "material_id": 2,
-     *     "user_id": 1,
-     *     "description": "Test de marquage couleur",
-     *     "speed": 800,
-     *     "power": 60,
-     *     "frequency": 30,
-     *     "pulse": 200,
-     *     "z_offset": 0,
-     *     "nb_passes": 1,
-     *     "sweep": 1,
-     *     "hatch": 0,
-     *     "row_interval": 0.05,
-     *     "wobble": 0
-     *   }
-     *
      * @param array $data
      * @return bool
      */
-    public function createTest($data)
+    public function createTest(array $data): bool
     {
         try {
-            // Début de transaction (cohérence entre tests et parameters)
             $this->conn->beginTransaction();
 
-            /* ---------- 1. Insertion dans la table tests ---------- */
-
+            // 1. Insertion dans la table tests
             $queryTest = "
                 INSERT INTO " . $this->table_name . "
                 (title, image, machine_id, material_id, user_id, description)
@@ -182,11 +139,9 @@ class TestModel
                 ':description' => $data['description'] ?? null
             ]);
 
-            // Récupération de l’ID du test créé
             $newTestId = $this->conn->lastInsertId();
 
-            /* ---------- 2. Insertion des paramètres ---------- */
-
+            // 2. Insertion des paramètres
             $queryParam = "
                 INSERT INTO parameters
                 (test_id, speed, power, frequency, pulse, z_offset, nb_passes, sweep, hatch, row_interval, wobble)
@@ -209,11 +164,9 @@ class TestModel
                 ':wobble'       => $data['wobble'] ?? 0
             ]);
 
-            // Validation de la transaction
             $this->conn->commit();
             return true;
         } catch (\Exception $e) {
-            // Annulation complète en cas d’erreur
             $this->conn->rollBack();
             return false;
         }
@@ -226,18 +179,16 @@ class TestModel
     /**
      * Mettre à jour un test et ses paramètres
      *
-     * Test Postman :
-     * - Méthode : PUT
-     * - URL : /api/tests/{id}
-     * - Body : JSON (mêmes champs que la création)
+     * @param int $id
+     * @param array $data
+     * @return bool
      */
-    public function updateTest($id, $data)
+    public function updateTest(int $id, array $data): bool
     {
         try {
             $this->conn->beginTransaction();
 
-            /* ---------- Update table tests ---------- */
-
+            // Update table tests
             $queryTest = "
                 UPDATE " . $this->table_name . "
                 SET title = :title,
@@ -254,12 +205,11 @@ class TestModel
                 ':image'       => $data['image'],
                 ':machine_id'  => $data['machine_id'],
                 ':material_id' => $data['material_id'],
-                ':description' => $data['description'],
+                ':description' => $data['description'] ?? null,
                 ':id'          => $id
             ]);
 
-            /* ---------- Update table parameters ---------- */
-
+            // Update table parameters
             $queryParam = "
                 UPDATE parameters
                 SET speed = :speed,
@@ -280,13 +230,13 @@ class TestModel
                 ':speed'        => $data['speed'],
                 ':power'        => $data['power'],
                 ':frequency'    => $data['frequency'],
-                ':pulse'        => $data['pulse'],
-                ':z_offset'     => $data['z_offset'],
-                ':nb_passes'    => $data['nb_passes'],
-                ':sweep'        => $data['sweep'],
-                ':hatch'        => $data['hatch'],
-                ':row_interval' => $data['row_interval'],
-                ':wobble'       => $data['wobble'],
+                ':pulse'        => $data['pulse'] ?? null,
+                ':z_offset'     => $data['z_offset'] ?? 0,
+                ':nb_passes'    => $data['nb_passes'] ?? 1,
+                ':sweep'        => $data['sweep'] ?? 1,
+                ':hatch'        => $data['hatch'] ?? 0,
+                ':row_interval' => $data['row_interval'] ?? 0.05,
+                ':wobble'       => $data['wobble'] ?? 0,
                 ':id'           => $id
             ]);
 
@@ -305,11 +255,10 @@ class TestModel
     /**
      * Supprimer un test
      *
-     * Test Postman :
-     * - Méthode : DELETE
-     * - URL : /api/tests/{id}
+     * @param int $id
+     * @return bool
      */
-    public function deleteTest($id)
+    public function deleteTest(int $id): bool
     {
         $query = "DELETE FROM " . $this->table_name . " WHERE test_id = :id";
 
