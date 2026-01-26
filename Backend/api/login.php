@@ -1,68 +1,52 @@
 <?php
 
 /**
- * Point d’entrée API – LOGIN
+ * Point d'entrée API – CONNEXION (LOGIN)
  *
  * Rôle :
- * - Recevoir les requêtes HTTP envoyées par Postman
- * - Initialiser l’environnement (autoload, DB, contrôleur)
- * - Rediriger la requête vers la bonne méthode du contrôleur
+ * - Recevoir les requêtes HTTP d'authentification
+ * - Initialiser l'autoload, la base de données et le contrôleur
+ * - Rediriger la requête vers la méthode login
  *
- * Exemple d’architecture :
- * Postman → /api/login.php → UserController → UserModel → Database
+ * Architecture :
+ * Frontend → /api/login.php → UserController → UserModel → Database
  */
 
-// ==============================
-// Chargement de l'autoloader Composer
-// ==============================
-
-// Permet le chargement automatique des classes (Database, UserController, UserModel, etc.)
+// Chargement des dépendances
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../src/Config/CORS.php';
 
 use Config\Database;
 use Controllers\UserController;
 
-// ==============================
-// Initialisation de la base de données
-// ==============================
+// 🔒 Logging conditionnel (développement uniquement)
+if (($_ENV['APP_ENV'] ?? 'production') === 'development') {
+    error_log("[" . date("Y-m-d H:i:s") . "] LOGIN - Requête reçue : " . $_SERVER['REQUEST_METHOD']);
+}
 
-// Création de la connexion PDO via la classe Database
-// Cette connexion sera utilisée pour toutes les requêtes SQL déclenchées par Postman
-$db = (new Database())->getConnection();
+try {
+    // Initialisation de la base de données
+    $database = new Database();
+    $db = $database->getConnection();
 
-// Instanciation du contrôleur utilisateur
-// La connexion PDO est injectée dans le contrôleur
-$controller = new UserController($db);
+    // Instanciation du contrôleur utilisateur
+    $controller = new UserController($db);
 
-// ==============================
-// Gestion des requêtes HTTP
-// ==============================
-
-/**
- * Test Postman :
- * - Méthode : POST
- * - URL : /api/login.php
- * - Headers :
- *   Content-Type: application/json
- * - Body (JSON) :
- *   {
- *     "email": "tony@mail.com",
- *     "password": "secret"
- *   }
- */
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    // Appel de la méthode login du contrôleur
-    // - Récupère les données envoyées par Postman
-    // - Vérifie l’email et le mot de passe
-    // - Retourne une réponse JSON
-    $controller->login();
-} else {
-
-    // Si la méthode HTTP n’est pas autorisée
-    http_response_code(405);
+    // Traitement de la requête
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $controller->login();
+    } else {
+        http_response_code(405);
+        echo json_encode([
+            "success" => false,
+            "message" => "Méthode non autorisée"
+        ]);
+    }
+} catch (Exception $e) {
+    http_response_code(500);
     echo json_encode([
-        "message" => "Méthode non autorisée"
+        "success" => false,
+        "message" => "Erreur serveur",
+        "error" => ($_ENV['APP_ENV'] === 'development') ? $e->getMessage() : null
     ]);
 }

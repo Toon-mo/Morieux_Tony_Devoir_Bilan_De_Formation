@@ -2,6 +2,8 @@
 
 namespace Controllers;
 
+require_once __DIR__ . '/../Config/CORS.php';
+
 use Models\UserModel;
 
 /**
@@ -9,58 +11,19 @@ use Models\UserModel;
  *
  * Rôle :
  * - Gérer les requêtes HTTP liées aux utilisateurs
- * - Servir de point d’entrée pour les appels Postman
+ * - Servir de point d'entrée pour les appels API
  * - Valider les données, appeler le modèle, renvoyer du JSON
  *
  * Architecture :
- * Postman → Routes → UserController → UserModel → Base de données
+ * Frontend → Routes → UserController → UserModel → Base de données
  */
 class UserController
 {
-    /**
-     * Instance du modèle utilisateur
-     * /api/users.php
-     */
     private $model;
 
-    /**
-     * Constructeur
-     *
-     * @param PDO $db Connexion à la base de données
-     *
-     * Fonctionnement avec Postman :
-     * - À chaque requête Postman, le contrôleur est instancié
-     * - Le modèle UserModel reçoit la connexion PDO
-     * - Les headers CORS permettent les appels API depuis n’importe quel client
-     */
     public function __construct($db)
     {
         $this->model = new UserModel($db);
-
-        /* =========================
-           ====== HEADERS CORS =====
-           ========================= */
-
-        // Autorise l’API à être appelée depuis n’importe quelle origine (Postman, navigateur, front-end)
-        header("Access-Control-Allow-Origin: *");
-
-        // Autorise certains en-têtes HTTP
-        header("Access-Control-Allow-Headers: access");
-
-        // Méthodes HTTP autorisées pour l’API
-        header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-
-        // Format de réponse JSON (indispensable pour Postman)
-        header("Content-Type: application/json; charset=UTF-8");
-
-        // En-têtes autorisés pour les requêtes JSON / Auth
-        header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
-
-        // Réponse automatique aux requêtes OPTIONS (pré-vol CORS)
-        if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-            http_response_code(200);
-            exit();
-        }
     }
 
     /* =========================
@@ -68,11 +31,11 @@ class UserController
        ========================= */
 
     /**
-     * [POST] Inscription d’un nouvel utilisateur
+     * [POST] Inscription d'un nouvel utilisateur
      *
-     * Test Postman :
+     * Test :
      * - Méthode : POST
-     * - URL : /api/register
+     * - URL : /api/register.php
      * - Body (JSON) :
      *   {
      *     "username": "Tony",
@@ -82,28 +45,71 @@ class UserController
      *
      * Réponses :
      * - 201 : utilisateur créé
-     * - 400 : données manquantes
+     * - 400 : données manquantes ou invalides
+     * - 409 : email déjà utilisé
      * - 500 : erreur serveur
      */
     public function register()
     {
-        // Récupération des données envoyées par Postman
         $data = json_decode(file_get_contents("php://input"), true);
 
-        // Vérification des champs obligatoires
-        if (!empty($data['username']) && !empty($data['email']) && !empty($data['password'])) {
-
-            // Appel du modèle pour créer l’utilisateur
-            if ($this->model->createUser($data)) {
-                http_response_code(201);
-                echo json_encode(["message" => "Utilisateur créé avec succès"]);
-            } else {
-                http_response_code(500);
-                echo json_encode(["message" => "Échec de la création de l'utilisateur"]);
-            }
-        } else {
+        // Validation des champs obligatoires
+        if (empty($data['username']) || empty($data['email']) || empty($data['password'])) {
             http_response_code(400);
-            echo json_encode(["message" => "Données incomplètes"]);
+            echo json_encode([
+                "success" => false,
+                "message" => "Données incomplètes (username, email, password requis)"
+            ]);
+            return;
+        }
+
+        // Validation du format email
+        if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            http_response_code(400);
+            echo json_encode([
+                "success" => false,
+                "message" => "Format d'email invalide"
+            ]);
+            return;
+        }
+
+        // Validation de la longueur du mot de passe
+        if (strlen($data['password']) < 6) {
+            http_response_code(400);
+            echo json_encode([
+                "success" => false,
+                "message" => "Le mot de passe doit contenir au moins 6 caractères"
+            ]);
+            return;
+        }
+
+        // Vérification si l'email existe déjà
+        $existingUser = $this->model->getUserByEmail($data['email']);
+        if ($existingUser) {
+            http_response_code(409);
+            echo json_encode([
+                "success" => false,
+                "message" => "Cet email est déjà utilisé"
+            ]);
+            return;
+        }
+
+        // Création de l'utilisateur
+        $userId = $this->model->createUser($data);
+
+        if ($userId) {
+            http_response_code(201);
+            echo json_encode([
+                "success" => true,
+                "message" => "Utilisateur créé avec succès",
+                "user_id" => $userId
+            ]);
+        } else {
+            http_response_code(500);
+            echo json_encode([
+                "success" => false,
+                "message" => "Échec de la création de l'utilisateur"
+            ]);
         }
     }
 
@@ -112,29 +118,45 @@ class UserController
        ========================= */
 
     /**
-     * [GET] Recherche d’un utilisateur par email (via query string)
+     * [GET] Récupérer tous les utilisateurs ou rechercher par email
      *
-     * Test Postman :
+     * Test :
      * - Méthode : GET
-     * - URL : /api/users?email=test@mail.com
+     * - URL : /api/users.php
+     * - URL : /api/users.php?email=test@mail.com
      *
      * Réponses :
-     * - 200 : utilisateur trouvé
+     * - 200 : utilisateur(s) trouvé(s)
      * - 404 : utilisateur non trouvé
      */
     public function index()
     {
-        // Récupération de l’email depuis l’URL
-        $user = $this->model->getUserByEmail($_GET['email'] ?? '');
+        // Si recherche par email
+        if (isset($_GET['email']) && !empty($_GET['email'])) {
+            $user = $this->model->getUserByEmail($_GET['email']);
 
-        if ($user) {
-            // Sécurité : on ne renvoie jamais le hash du mot de passe
-            unset($user['password_hash']);
-            echo json_encode($user);
-        } else {
-            http_response_code(404);
-            echo json_encode(["message" => "Utilisateur non trouvé"]);
+            if ($user) {
+                // 🔒 SÉCURITÉ : Suppression du hash avant envoi
+                unset($user['password_hash']);
+
+                http_response_code(200);
+                echo json_encode($user);
+            } else {
+                http_response_code(404);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "Utilisateur non trouvé"
+                ]);
+            }
+            return;
         }
+
+        // Sinon, retourner tous les utilisateurs (pour admin)
+        // Note : À protéger avec un middleware d'authentification
+        http_response_code(501);
+        echo json_encode([
+            "message" => "Fonctionnalité non implémentée"
+        ]);
     }
 
     /* =========================
@@ -144,9 +166,9 @@ class UserController
     /**
      * [POST] Connexion utilisateur
      *
-     * Test Postman :
+     * Test :
      * - Méthode : POST
-     * - URL : /api/login
+     * - URL : /api/login.php
      * - Body (JSON) :
      *   {
      *     "email": "tony@mail.com",
@@ -160,32 +182,39 @@ class UserController
      */
     public function login()
     {
-        // Lecture du body JSON envoyé par Postman
         $data = json_decode(file_get_contents("php://input"), true);
 
-        if (!empty($data['email']) && !empty($data['password'])) {
-
-            // Recherche de l’utilisateur par email
-            $user = $this->model->getUserByEmail($data['email']);
-
-            // Vérification du mot de passe avec le hash stocké en base
-            if ($user && password_verify($data['password'], $user['password_hash'])) {
-
-                // On retire le mot de passe avant la réponse
-                unset($user['password_hash']);
-
-                http_response_code(200);
-                echo json_encode([
-                    "message" => "Connexion réussie",
-                    "user" => $user
-                ]);
-            } else {
-                http_response_code(401);
-                echo json_encode(["message" => "Email ou mot de passe incorrect"]);
-            }
-        } else {
+        // Validation des champs obligatoires
+        if (empty($data['email']) || empty($data['password'])) {
             http_response_code(400);
-            echo json_encode(["message" => "Identifiants manquants"]);
+            echo json_encode([
+                "success" => false,
+                "message" => "Email et mot de passe requis"
+            ]);
+            return;
+        }
+
+        // Recherche de l'utilisateur par email
+        $user = $this->model->getUserByEmail($data['email']);
+
+        // Vérification du mot de passe
+        if ($user && password_verify($data['password'], $user['password_hash'])) {
+
+            // 🔒 SÉCURITÉ : Suppression du hash avant envoi
+            unset($user['password_hash']);
+
+            http_response_code(200);
+            echo json_encode([
+                "success" => true,
+                "message" => "Connexion réussie",
+                "user" => $user
+            ]);
+        } else {
+            http_response_code(401);
+            echo json_encode([
+                "success" => false,
+                "message" => "Email ou mot de passe incorrect"
+            ]);
         }
     }
 
@@ -194,11 +223,11 @@ class UserController
        ========================= */
 
     /**
-     * [GET] Recherche d’un utilisateur par ID
+     * [GET] Recherche d'un utilisateur par ID
      *
-     * Test Postman :
+     * Test :
      * - Méthode : GET
-     * - )
+     * - URL : /api/users.php?id=1
      *
      * @param int $id
      */
@@ -207,37 +236,108 @@ class UserController
         $user = $this->model->getUserById($id);
 
         if ($user) {
+            // 🔒 SÉCURITÉ : Suppression du hash avant envoi
             unset($user['password_hash']);
+
+            http_response_code(200);
             echo json_encode($user);
         } else {
             http_response_code(404);
-            echo json_encode(["message" => "Utilisateur non trouvé"]);
+            echo json_encode([
+                "success" => false,
+                "message" => "Utilisateur non trouvé"
+            ]);
         }
     }
 
     /* =========================
-       ===== READ BY EMAIL =====
+       ===== UPDATE (PUT) ======
        ========================= */
 
     /**
-     * [GET] Recherche d’un utilisateur par email (paramètre direct)
-     *
-     * Test Postman :
-     * - Méthode : GET
-     * - URL : /api/users/email/{email}
-     *
-     * @param string $email
+     * [PUT] Mise à jour d'un utilisateur
+     * 
+     * Test :
+     * - Méthode : PUT
+     * - URL : /api/users.php?id=1
+     * - Body JSON :
+     * {
+     *   "username": "NewName",
+     *   "email": "newmail@mail.com"
+     * }
+     * 
+     * Réponses :
+     * - 200 : utilisateur mis à jour
+     * - 400 : données invalides
+     * - 404 : utilisateur non trouvé
+     * - 500 : erreur serveur
      */
-    public function showByEmail($email)
+    public function updateUser($id)
     {
-        $user = $this->model->getUserByEmail($email);
+        $data = json_decode(file_get_contents("php://input"), true);
 
-        if ($user) {
-            unset($user['password_hash']);
-            echo json_encode($user);
+        // Validation minimale
+        if (empty($data['username']) && empty($data['email'])) {
+            http_response_code(400);
+            echo json_encode([
+                "success" => false,
+                "message" => "Aucune donnée à mettre à jour"
+            ]);
+            return;
+        }
+
+        // Validation du format email si fourni
+        if (!empty($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            http_response_code(400);
+            echo json_encode([
+                "success" => false,
+                "message" => "Format d'email invalide"
+            ]);
+            return;
+        }
+
+        if ($this->model->updateUser($id, $data)) {
+            http_response_code(200);
+            echo json_encode([
+                "success" => true,
+                "message" => "Utilisateur mis à jour avec succès"
+            ]);
         } else {
-            http_response_code(404);
-            echo json_encode(["message" => "Utilisateur non trouvé"]);
+            http_response_code(500);
+            echo json_encode([
+                "success" => false,
+                "message" => "La mise à jour a échoué"
+            ]);
+        }
+    }
+
+    /* =========================
+       ===== DELETE (DELETE) ====
+       ========================= */
+
+    /**
+     * [DELETE] Supprimer un utilisateur
+     *
+     * Test :
+     * - Méthode : DELETE
+     * - URL : /api/users.php?id=1
+     *
+     * @param int $id
+     */
+    public function deleteUser($id)
+    {
+        if ($this->model->deleteUser($id)) {
+            http_response_code(200);
+            echo json_encode([
+                "success" => true,
+                "message" => "Utilisateur supprimé avec succès"
+            ]);
+        } else {
+            http_response_code(500);
+            echo json_encode([
+                "success" => false,
+                "message" => "La suppression a échoué"
+            ]);
         }
     }
 }

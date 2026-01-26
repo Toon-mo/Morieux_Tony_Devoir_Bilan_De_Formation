@@ -3,6 +3,7 @@
 // Chargement de l'autoloader Composer
 // =========================
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../src/Config/CORS.php';
 
 use Config\Database;
 use Controllers\UserController;
@@ -19,28 +20,6 @@ use Controllers\UserController;
  * Architecture :
  * Postman → this file (api/users/index.php) → UserController → UserModel → Base de données
  */
-
-/* =========================
-   ======== CORS ===========
-   ========================= */
-
-// Autorise toutes les origines (Postman, navigateur, front-end)
-header("Access-Control-Allow-Origin: *");
-
-// Méthodes HTTP autorisées
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-
-// En-têtes autorisés (JSON, Auth, AJAX)
-header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
-
-// Réponse en JSON
-header("Content-Type: application/json; charset=UTF-8");
-
-// Réponse automatique aux requêtes OPTIONS (CORS preflight)
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
 
 /* =========================
    ===== Initialisation ====
@@ -85,7 +64,7 @@ switch ($_SERVER['REQUEST_METHOD']) {
 
     case 'POST':
         /**
-         * [POST] Création d’un nouvel utilisateur (inscription)
+         * [POST] Création d'un nouvel utilisateur (inscription)
          *
          * Test Postman :
          * - Méthode : POST
@@ -110,12 +89,12 @@ switch ($_SERVER['REQUEST_METHOD']) {
          * [PUT] Mise à jour d'un utilisateur
          * 
          * Test Postman :
-         * -Méthode : Put
+         * - Méthode : PUT
          * - URL : /api/users?id=1
          * - Body JSON :
          * {
-         * "username" : "NewName",
-         * "email": "newmail@mail.com"
+         *   "username": "NewName",
+         *   "email": "newmail@mail.com"
          * }
          * 
          * Réponses :
@@ -141,7 +120,7 @@ switch ($_SERVER['REQUEST_METHOD']) {
          * - Méthode : DELETE
          * - URL : /api/users?id=1
          *
-         * Réponse :
+         * Réponses :
          * - 200 : utilisateur supprimé
          * - 404 : utilisateur non trouvé
          */
