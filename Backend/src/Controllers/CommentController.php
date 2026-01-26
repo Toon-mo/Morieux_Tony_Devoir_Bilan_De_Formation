@@ -2,7 +2,10 @@
 
 namespace Controllers;
 
+require_once __DIR__ . '/../Config/CORS.php';
+
 use Models\CommentModel;
+use PDO;
 
 /**
  * CommentController
@@ -21,46 +24,16 @@ class CommentController
     /**
      * Instance du modèle Comment
      */
-    private $model;
+    private CommentModel $model;
 
     /**
      * Constructeur
      *
      * @param PDO $db Connexion PDO injectée
-     *
-     * Le constructeur :
-     * - Initialise le modèle
-     * - Configure les headers CORS
-     * - Gère les requêtes OPTIONS (pré-vol)
      */
-    public function __construct($db)
+    public function __construct(PDO $db)
     {
         $this->model = new CommentModel($db);
-
-        /* =========================
-           ====== HEADERS CORS =====
-           ========================= */
-
-        // Autorise toutes les origines (Postman, navigateur, front-end)
-        header("Access-Control-Allow-Origin: *");
-
-        // Autorise certains en-têtes HTTP
-        header("Access-Control-Allow-Headers: access");
-
-        // Méthodes HTTP autorisées pour les endpoints commentaires
-        header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-
-        // Type de contenu JSON
-        header("Content-Type: application/json; charset=UTF-8");
-
-        // En-têtes supplémentaires nécessaires pour le JSON et l’authentification
-        header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
-
-        // Réponse automatique aux requêtes OPTIONS (CORS preflight)
-        if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-            http_response_code(200);
-            exit();
-        }
     }
 
     /* =========================
@@ -69,27 +42,12 @@ class CommentController
 
     /**
      * [POST] Ajouter un nouveau commentaire
-     *
-     * Test Postman :
-     * - Méthode : POST
-     * - URL : /api/comments
-     * - Body JSON :
-     * {
-     *   "user_id": 1,
-     *   "test_id": 2,
-     *   "content": "Ceci est un commentaire de test"
-     * }
-     *
-     * Réponses :
-     * - 201 : commentaire ajouté avec succès
-     * - 400 : données incomplètes
-     * - 500 : échec serveur
      */
-    public function addComment()
+    public function addComment(): void
     {
+        header('Content-Type: application/json');
         $data = json_decode(file_get_contents("php://input"), true);
 
-        // Vérification des données
         if (!empty($data['user_id']) && !empty($data['test_id']) && !empty($data['content'])) {
             if ($this->model->createComment($data)) {
                 http_response_code(201);
@@ -118,22 +76,14 @@ class CommentController
        ========================= */
 
     /**
-     * [GET] Récupérer les commentaires d’un test
-     *
-     * Test Postman :
-     * - Méthode : GET
-     * - URL : /api/comments?test_id=1
-     *
-     * Réponses :
-     * - 200 : liste des commentaires
-     * - 400 : test_id manquant
-     * - 404 : aucun commentaire trouvé (optionnel selon implémentation)
+     * [GET] Récupérer les commentaires d'un test
      */
-    public function getCommentsByTest()
+    public function getCommentsByTest(): void
     {
-        $testId = $_GET['test_id'] ?? '';
+        header('Content-Type: application/json');
+        $testId = $_GET['test_id'] ?? null;
 
-        if (!empty($testId)) {
+        if ($testId) {
             $comments = $this->model->getCommentsByTestId($testId);
 
             if (!empty($comments)) {
@@ -149,6 +99,45 @@ class CommentController
             http_response_code(400);
             echo json_encode([
                 "message" => "ID de test manquant"
+            ]);
+        }
+    }
+
+    /* =========================
+       ===== DELETE (DELETE) ===
+       ========================= */
+
+    /**
+     * [DELETE] Supprimer un commentaire
+     */
+    public function deleteComment(): void
+    {
+        header('Content-Type: application/json');
+
+        // Récupérer l'id depuis GET ou DELETE
+        parse_str(file_get_contents("php://input"), $data);
+        $id = $_GET['id'] ?? $data['id'] ?? null;
+
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode([
+                "success" => false,
+                "message" => "ID de commentaire manquant"
+            ]);
+            return;
+        }
+
+        if ($this->model->deleteComment($id)) {
+            http_response_code(200);
+            echo json_encode([
+                "success" => true,
+                "message" => "Commentaire supprimé avec succès"
+            ]);
+        } else {
+            http_response_code(500);
+            echo json_encode([
+                "success" => false,
+                "message" => "La suppression du commentaire a échoué"
             ]);
         }
     }
