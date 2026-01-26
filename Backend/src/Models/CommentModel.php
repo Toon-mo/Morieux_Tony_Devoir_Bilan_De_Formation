@@ -1,178 +1,60 @@
 <?php
 
-namespace Controllers;
+namespace Models;
 
-use Models\CommentModel;
+use PDO;
 
-/**
- * CommentController
- *
- * Rôle :
- * - Gérer les requêtes HTTP liées aux commentaires
- * - Recevoir les appels depuis Postman
- * - Appeler le modèle CommentModel
- * - Retourner des réponses JSON avec les bons codes HTTP
- *
- * Architecture :
- * Postman → Routes → CommentController → CommentModel → Base de données
- */
-class CommentController
+class CommentModel
 {
-    /**
-     * Instance du modèle Comment
-     */
-    private $model;
+    private PDO $conn;
+    private string $table_name = "comments";
 
-    /**
-     * Constructeur
-     *
-     * @param PDO $db Connexion PDO injectée
-     *
-     * Le constructeur :
-     * - Initialise le modèle
-     * - Configure les headers CORS
-     * - Gère les requêtes OPTIONS (pré-vol)
-     */
-    public function __construct($db)
+    public function __construct(PDO $db)
     {
-        $this->model = new CommentModel($db);
-
-        /* =========================
-           ====== HEADERS CORS =====
-           ========================= */
-
-        header("Access-Control-Allow-Origin: *");
-        header("Access-Control-Allow-Headers: access");
-        header("Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS");
-        header("Content-Type: application/json; charset=UTF-8");
-        header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
-
-        // Réponse automatique aux requêtes OPTIONS
-        if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-            http_response_code(200);
-            exit();
-        }
+        $this->conn = $db;
     }
 
-    /* =========================
-       ===== READ (GET) ========
-       ========================= */
-
     /**
-     * [GET] Liste des commentaires d’un test
-     *
-     * Test Postman :
-     * - Méthode : GET
-     * - URL : /api/comments?test_id=1
-     *
-     * @param int $test_id
-     *
-     * Réponses :
-     * - 200 : liste des commentaires
-     * - 404 : aucun commentaire trouvé
+     * Crée un commentaire
      */
-    public function getByTest($test_id)
+    public function createComment(array $data): bool
     {
-        $comments = $this->model->getCommentsByTestId($test_id);
+        $query = "INSERT INTO {$this->table_name} (test_id, user_id, content) VALUES (:test_id, :user_id, :content)";
+        $stmt = $this->conn->prepare($query);
 
-        if (!empty($comments)) {
-            echo json_encode($comments);
-        } else {
-            http_response_code(404);
-            echo json_encode([
-                "message" => "Aucun commentaire trouvé pour ce test"
-            ]);
-        }
+        $stmt->bindParam(':test_id', $data['test_id'], PDO::PARAM_INT);
+        $stmt->bindParam(':user_id', $data['user_id'], PDO::PARAM_INT);
+        $stmt->bindParam(':content', $data['content'], PDO::PARAM_STR);
+
+        return $stmt->execute();
     }
 
-    /* =========================
-       ===== CREATE (POST) =====
-       ========================= */
-
     /**
-     * [POST] Création d’un commentaire
-     *
-     * Test Postman :
-     * - Méthode : POST
-     * - URL : /api/comments
-     * - Body : JSON
-     *
-     * Exemple Body :
-     * {
-     *   "test_id": 1,
-     *   "user_id": 2,
-     *   "content": "Très bon test"
-     * }
-     *
-     * Réponses :
-     * - 201 : commentaire créé
-     * - 400 : données invalides
-     * - 500 : erreur serveur
+     * Récupère les commentaires avec le nom de l'auteur (Jointure)
      */
-    public function createComment()
+    public function getCommentsByTestId(int $test_id): array
     {
-        $data = json_decode(file_get_contents("php://input"), true);
+        $query = "SELECT c.comment_id, c.content, c.created_at, u.username 
+                  FROM {$this->table_name} c 
+                  LEFT JOIN users u ON c.user_id = u.user_id 
+                  WHERE c.test_id = :test_id 
+                  ORDER BY c.created_at DESC";
 
-        // Vérification minimale des données
-        if (
-            empty($data['test_id']) ||
-            empty($data['user_id']) ||
-            empty($data['content'])
-        ) {
-            http_response_code(400);
-            echo json_encode([
-                "success" => false,
-                "message" => "Données manquantes"
-            ]);
-            return;
-        }
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':test_id', $test_id, PDO::PARAM_INT);
+        $stmt->execute();
 
-        if ($this->model->createComment($data)) {
-            http_response_code(201);
-            echo json_encode([
-                "success" => true,
-                "message" => "Commentaire ajouté avec succès"
-            ]);
-        } else {
-            http_response_code(500);
-            echo json_encode([
-                "success" => false,
-                "message" => "La création du commentaire a échoué"
-            ]);
-        }
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /* =========================
-       ===== DELETE (DELETE) ====
-       ========================= */
-
     /**
-     * [DELETE] Suppression d’un commentaire
-     *
-     * Test Postman :
-     * - Méthode : DELETE
-     * - URL : /api/comments/{comment_id}
-     *
-     * @param int $comment_id
-     *
-     * Réponses :
-     * - 200 : commentaire supprimé
-     * - 500 : erreur serveur
+     * Supprime un commentaire
      */
-    public function deleteComment($comment_id)
+    public function deleteComment(int $comment_id): bool
     {
-        if ($this->model->deleteComment($comment_id)) {
-            http_response_code(200);
-            echo json_encode([
-                "success" => true,
-                "message" => "Commentaire supprimé avec succès"
-            ]);
-        } else {
-            http_response_code(500);
-            echo json_encode([
-                "success" => false,
-                "message" => "La suppression du commentaire a échoué"
-            ]);
-        }
+        $query = "DELETE FROM {$this->table_name} WHERE comment_id = :comment_id";
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':comment_id', $comment_id, PDO::PARAM_INT);
+        return $stmt->execute();
     }
 }
