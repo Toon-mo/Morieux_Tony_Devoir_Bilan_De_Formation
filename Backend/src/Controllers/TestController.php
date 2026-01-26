@@ -2,107 +2,59 @@
 
 namespace Controllers;
 
+require_once __DIR__ . '/../Config/CORS.php';
+
 use Models\TestModel;
 
-/**
- * TestController
- *
- * Rôle :
- * - Gérer les requêtes HTTP liées aux tests de gravure
- * - Recevoir les appels depuis Postman
- * - Appeler le modèle TestModel
- * - Retourner des réponses JSON avec les bons codes HTTP
- *
- * Architecture :
- * Postman → Routes → TestController → TestModel → Base de données
- */
 class TestController
 {
-    /**
-     * Instance du modèle Test
-     */
     private $model;
 
-    /**
-     * Constructeur
-     *
-     * @param PDO $db Connexion PDO injectée
-     *
-     * Le constructeur :
-     * - Initialise le modèle
-     * - Configure les headers CORS
-     * - Gère les requêtes OPTIONS (pré-vol)
-     */
     public function __construct($db)
     {
         $this->model = new TestModel($db);
-
-        /* =========================
-           ====== HEADERS CORS =====
-           ========================= */
-
-        // Autorise l’API à être appelée depuis Postman, navigateur ou front-end
-        header("Access-Control-Allow-Origin: *");
-
-        // Autorise certains en-têtes HTTP
-        header("Access-Control-Allow-Headers: access");
-
-        // Méthodes HTTP autorisées pour les endpoints tests
-        header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-
-        // Format de réponse JSON
-        header("Content-Type: application/json; charset=UTF-8");
-
-        // En-têtes nécessaires pour le JSON et l’authentification
-        header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
-
-        // Réponse automatique aux requêtes OPTIONS (CORS preflight)
-        if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-            http_response_code(200);
-            exit();
-        }
     }
 
     /* =========================
        ===== READ (GET) ========
        ========================= */
 
-    /**
-     * [GET] Liste de tous les tests (vue Home)
-     *
-     * Test Postman :
-     * - Méthode : GET
-     * - URL : /api/tests
-     *
-     * Réponse :
-     * - 200 : liste des tests
-     */
     public function index()
     {
-        $tests = $this->model->getAllTests();
-
-        // Retourne la liste des tests en JSON
-        echo json_encode($tests);
+        try {
+            $tests = $this->model->getAllTests();
+            http_response_code(200);
+            echo json_encode($tests);
+        } catch (\Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "success" => false,
+                "message" => "Erreur lors de la récupération des tests"
+            ]);
+        }
     }
 
-    /**
-     * [GET] Détails d’un test spécifique
-     *
-     * Test Postman :
-     * - Méthode : GET
-     * - URL : /api/tests/{id}
-     *
-     * @param int $id
-     */
     public function show($id)
     {
-        $test = $this->model->getTestDetails($id);
+        try {
+            $test = $this->model->getTestDetails($id);
 
-        if ($test) {
-            echo json_encode($test);
-        } else {
-            http_response_code(404);
-            echo json_encode(["message" => "Test non trouvé"]);
+            if ($test) {
+                http_response_code(200);
+                echo json_encode($test);
+            } else {
+                http_response_code(404);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "Test non trouvé"
+                ]);
+            }
+        } catch (\Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                "success" => false,
+                "message" => "Erreur lors de la récupération du test"
+            ]);
         }
     }
 
@@ -111,29 +63,115 @@ class TestController
        ========================= */
 
     /**
-     * [POST] Création d’un nouveau test
-     *
-     * Test Postman :
+     * [POST] Création d'un nouveau test avec upload d'image sécurisé
+     * 
+     * Test :
      * - Méthode : POST
-     * - URL : /api/tests
-     * - Body : JSON (données du test + paramètres)
+     * - URL : /api/tests.php
+     * - Content-Type : multipart/form-data
+     * - Body : 
+     *   - title (string)
+     *   - description (string)
+     *   - machine_id (int)
+     *   - material_id (int)
+     *   - user_id (int)
+     *   - speed, power, frequency, etc.
+     *   - image (file)
      */
-    public function createTest()
+    public function CreateTest()
     {
-        // Lecture du body JSON envoyé par Postman
-        $data = json_decode(file_get_contents("php://input"), true);
-
-        if ($this->model->createTest($data)) {
-            http_response_code(201);
+        // Validation des champs obligatoires
+        if (empty($_POST['title']) || empty($_POST['machine_id']) || empty($_POST['material_id'])) {
+            http_response_code(400);
             echo json_encode([
-                "success" => true,
-                "message" => "Test créé avec succès"
+                "success" => false,
+                "message" => "Données incomplètes (title, machine_id, material_id requis)"
             ]);
+            return;
+        }
+
+        $data = $_POST;
+
+        // 🔒 GESTION SÉCURISÉE DE L'UPLOAD D'IMAGE
+        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+
+            $file = $_FILES['image'];
+
+            // Validation de la taille (max 5 Mo)
+            $maxSize = 5 * 1024 * 1024; // 5 Mo en octets
+            if ($file['size'] > $maxSize) {
+                http_response_code(400);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "L'image ne doit pas dépasser 5 Mo"
+                ]);
+                return;
+            }
+
+            // Validation du type MIME
+            $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mimeType = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+
+            if (!in_array($mimeType, $allowedTypes)) {
+                http_response_code(400);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "Format d'image non autorisé (JPEG, PNG, WEBP uniquement)"
+                ]);
+                return;
+            }
+
+            // Génération d'un nom de fichier sécurisé
+            $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $safeName = time() . "_" . uniqid() . "." . strtolower($extension);
+
+            // Vérification et création du dossier uploads si nécessaire
+            $uploadDir = __DIR__ . "/../../public/uploads/";
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+
+            $destination = $uploadDir . $safeName;
+
+            // Déplacement du fichier
+            if (move_uploaded_file($file['tmp_name'], $destination)) {
+                $data['image'] = $safeName;
+            } else {
+                http_response_code(500);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "Échec de l'upload de l'image"
+                ]);
+                return;
+            }
         } else {
+            // Image par défaut si aucune image n'est fournie
+            $data['image'] = 'default.jpg';
+        }
+
+        // Création du test en base de données
+        try {
+            if ($this->model->createTest($data)) {
+                http_response_code(201);
+                echo json_encode([
+                    "success" => true,
+                    "message" => "Test créé avec succès",
+                    "image" => $data['image']
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "Erreur lors de la création du test"
+                ]);
+            }
+        } catch (\Exception $e) {
             http_response_code(500);
             echo json_encode([
                 "success" => false,
-                "message" => "La création du test a échoué"
+                "message" => "Erreur serveur : " . $e->getMessage()
             ]);
         }
     }
@@ -142,32 +180,38 @@ class TestController
        ===== UPDATE (PUT) ======
        ========================= */
 
-    /**
-     * [PUT] Mise à jour d’un test existant
-     *
-     * Test Postman :
-     * - Méthode : PUT
-     * - URL : /api/tests/{id}
-     * - Body : JSON
-     *
-     * @param int $id
-     */
     public function updateTest($id)
     {
-        // Lecture des données JSON envoyées
         $data = json_decode(file_get_contents("php://input"), true);
 
-        if ($this->model->updateTest($id, $data)) {
-            http_response_code(200);
+        if (empty($data)) {
+            http_response_code(400);
             echo json_encode([
-                "success" => true,
-                "message" => "Test mis à jour avec succès"
+                "success" => false,
+                "message" => "Aucune donnée à mettre à jour"
             ]);
-        } else {
+            return;
+        }
+
+        try {
+            if ($this->model->updateTest($id, $data)) {
+                http_response_code(200);
+                echo json_encode([
+                    "success" => true,
+                    "message" => "Test mis à jour avec succès"
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "La mise à jour du test a échoué"
+                ]);
+            }
+        } catch (\Exception $e) {
             http_response_code(500);
             echo json_encode([
                 "success" => false,
-                "message" => "La mise à jour du test a échoué"
+                "message" => "Erreur serveur"
             ]);
         }
     }
@@ -176,28 +220,37 @@ class TestController
        ===== DELETE (DELETE) ====
        ========================= */
 
-    /**
-     * [DELETE] Suppression d’un test
-     *
-     * Test Postman :
-     * - Méthode : DELETE
-     * - URL : /api/tests/{id}
-     *
-     * @param int $id
-     */
     public function deleteTest($id)
     {
-        if ($this->model->deleteTest($id)) {
-            http_response_code(200);
-            echo json_encode([
-                "success" => true,
-                "message" => "Test supprimé avec succès"
-            ]);
-        } else {
+        try {
+            // Récupération du test pour supprimer l'image associée
+            $test = $this->model->getTestDetails($id);
+
+            if ($test && $test['image'] !== 'default.jpg') {
+                $imagePath = __DIR__ . "/../../public/uploads/" . $test['image'];
+                if (file_exists($imagePath)) {
+                    unlink($imagePath); // Suppression physique du fichier
+                }
+            }
+
+            if ($this->model->deleteTest($id)) {
+                http_response_code(200);
+                echo json_encode([
+                    "success" => true,
+                    "message" => "Test supprimé avec succès"
+                ]);
+            } else {
+                http_response_code(500);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "La suppression a échoué"
+                ]);
+            }
+        } catch (\Exception $e) {
             http_response_code(500);
             echo json_encode([
                 "success" => false,
-                "message" => "La suppression a échoué"
+                "message" => "Erreur serveur"
             ]);
         }
     }

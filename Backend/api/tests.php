@@ -1,8 +1,4 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-
-use Config\Database;
-use Controllers\TestController;
 
 /**
  * Front Controller pour l'API Tests
@@ -17,85 +13,63 @@ use Controllers\TestController;
  * Postman → this file (index.php ou api/tests.php) → TestController → TestModel → Base de données
  */
 
-/* =========================
-   ======== CORS ===========
-   ========================= */
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../src/Config/CORS.php';
 
-// Autorise toutes les origines
-header("Access-Control-Allow-Origin: *");
+use Config\Database;
+use Controllers\TestController;
 
-// Autorise les méthodes HTTP GET, POST, PUT, DELETE, OPTIONS
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-
-// Autorise certains en-têtes
-header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
-
-// Réponse JSON
-header("Content-Type: application/json; charset=UTF-8");
-
-// Réponse automatique aux requêtes OPTIONS (pré-vol)
+// Réponse immédiate pour les requêtes OPTIONS (prévols CORS)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
-    exit();
+    exit;
 }
 
-/* =========================
-   ===== Initialisation ====
-   ========================= */
+// ==============================
+// Initialisation de la base et du controller
+// ==============================
+try {
+    $db = (new Database())->getConnection();
+} catch (\PDOException $e) {
+    http_response_code(500);
+    echo json_encode([
+        "message" => "Erreur de connexion à la base de données",
+        "error"   => $e->getMessage()
+    ]);
+    exit;
+}
 
-// Connexion à la base de données via la classe Database
-$db = (new Database())->getConnection();
-
-// Instanciation du controller TestController
 $controller = new TestController($db);
 
-/* =========================
-   ===== Routing HTTP ======
-   ========================= */
+// ==============================
+// Routing HTTP
+// ==============================
+$method = $_SERVER['REQUEST_METHOD'];
 
-switch ($_SERVER['REQUEST_METHOD']) {
+switch ($method) {
     case 'GET':
-        if (isset($_GET['id'])) {
-            $controller->show($_GET['id']);
+        $id = $_GET['id'] ?? null;
+        if ($id) {
+            $controller->show($id);
         } else {
             $controller->index();
         }
         break;
 
     case 'POST':
-        /**
-         * [POST] Créer un nouveau test
-         *
-         * Test Postman :
-         * - Méthode : POST
-         * - URL : /api/tests
-         * - Body JSON : { "name": "Test 1", "description": "Description du test", ... }
-         *
-         * Réponse :
-         * - 201 : test créé
-         * - 400 : données invalides
-         */
         $controller->createTest();
         break;
 
     case 'PUT':
-        /**
-         * [PUT] Mettre à jour un test
-         *
-         * Test Postman :
-         * - Méthode : PUT
-         * - URL : /api/tests/{id}
-         * - Body JSON : { "name": "Nouveau nom", "description": "Nouvelle description", ... }
-         *
-         * Réponse :
-         * - 200 : test mis à jour
-         * - 400 : données invalides
-         * - 404 : test non trouvé
-         */
-        // Pour PUT, on suppose que l'ID est passé via l'URL (ex: /api/tests.php?id=1)
+    case 'PATCH':
+        // Pour PUT/PATCH, l'ID doit être dans l'URL (ex: tests.php?id=1)
         $id = $_GET['id'] ?? null;
         if ($id) {
-            $controller->updateTest($id);
+            // 1. Récupérer le corps JSON
+            $putData = json_decode(file_get_contents("php://input"), true);
+
+            // 2. CORRECTION : Envoyer les données au contrôleur pour traitement
+            $controller->updateTest($id, $putData);
         } else {
             http_response_code(400);
             echo json_encode(["message" => "ID du test manquant"]);
@@ -103,17 +77,6 @@ switch ($_SERVER['REQUEST_METHOD']) {
         break;
 
     case 'DELETE':
-        /**
-         * [DELETE] Supprimer un test
-         *
-         * Test Postman :
-         * - Méthode : DELETE
-         * - URL : /api/tests/{id}
-         *
-         * Réponse :
-         * - 200 : test supprimé
-         * - 404 : test non trouvé
-         */
         $id = $_GET['id'] ?? null;
         if ($id) {
             $controller->deleteTest($id);
@@ -124,7 +87,6 @@ switch ($_SERVER['REQUEST_METHOD']) {
         break;
 
     default:
-        // Méthode HTTP non autorisée
         http_response_code(405);
         echo json_encode(["message" => "Méthode non autorisée"]);
         break;
