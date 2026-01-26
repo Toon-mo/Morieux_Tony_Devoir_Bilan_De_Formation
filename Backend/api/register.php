@@ -13,61 +13,58 @@
  */
 
 // ==============================
-// Chargement de l'autoloader Composer
+// Chargement de l'autoloader Composer et CORS
 // ==============================
 
-// Permet le chargement automatique des classes via Composer
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../src/Config/CORS.php';
 
 use Config\Database;
 use Controllers\UserController;
 
 // ==============================
+// Gestion des requêtes OPTIONS (prévols CORS)
+// ==============================
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// ==============================
 // Initialisation de la base de données
 // ==============================
+try {
+    $db = (new Database())->getConnection();
+} catch (PDOException $e) {
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        "message" => "Erreur de connexion à la base de données",
+        "error" => $e->getMessage()
+    ]);
+    exit;
+}
 
-// Création de la connexion PDO
-// Cette connexion sera utilisée pour insérer l’utilisateur en base
-$db = (new Database())->getConnection();
-
+// ==============================
 // Instanciation du contrôleur utilisateur
-// La connexion PDO est injectée dans le contrôleur
+// ==============================
 $controller = new UserController($db);
 
 // ==============================
 // Gestion des requêtes HTTP
 // ==============================
-
-/**
- * Test Postman :
- * - Méthode : POST
- * - URL : /api/register.php
- * - Headers :
- *   Content-Type: application/json
- * - Body (JSON) :
- *   {
- *     "username": "Tony",
- *     "email": "tony@mail.com",
- *     "password": "secret"
- *   }
- *
- * Réponses possibles :
- * - 201 : utilisateur créé
- * - 400 : données manquantes
- * - 500 : erreur serveur
- */
+header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     // Appel de la méthode register du contrôleur
-    // - Récupère les données envoyées par Postman
-    // - Vérifie les champs requis
-    // - Crée l’utilisateur en base
-    // - Retourne une réponse JSON
+    // Cette méthode doit gérer :
+    // - la récupération des données JSON
+    // - la validation des champs
+    // - la création de l'utilisateur
+    // - le retour JSON avec le code HTTP approprié
     $controller->register();
 } else {
-
-    // Si la méthode HTTP n’est pas autorisée
+    // Méthode non autorisée
     http_response_code(405);
     echo json_encode([
         "message" => "Méthode non autorisée"
