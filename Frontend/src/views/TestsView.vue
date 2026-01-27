@@ -92,6 +92,7 @@ onMounted(fetchTests);
       <!-- BARRE DE RECHERCHE (Optionnelle comme sur ton visuel) -->
       <div class="search-container">
         <input
+          v-model="searchTerm"
           type="text"
           placeholder="Rechercher un matériau, une machine..."
           class="search-input"
