@@ -1,2 +1,4 @@
 /Backend/vendor/
 /Backend/.env
+/node_modules/
+/public/uploads/
