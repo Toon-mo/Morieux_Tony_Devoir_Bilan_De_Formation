@@ -83,19 +83,19 @@ onMounted(fetchTests);
 }
 
 @media (max-width: 1200px) {
-  .test-grid {
+  .test-container {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 900px) {
-  .test-grid {
+  .test-container {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 600px) {
-  .test-grid {
+  .test-container {
     grid-template-columns: 1fr;
   }
 }
