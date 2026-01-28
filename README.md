@@ -72,7 +72,7 @@ Backend/
 │   ├── login.php                 # Endpoints login
 │   ├── machines.php              # Endpoints machines
 │   ├── materials.php             # Endpoints matériaux
-│   ├── register                  # Endpoints register
+│   ├── register.php              # Endpoints register
 │   ├── tests.php                 # Endpoints tests
 │   └── users.php                 # Endpoints utilisateurs/auth
 ├── public/
@@ -354,22 +354,34 @@ Les fichiers de production seront dans `Frontend/dist/`
 ### Exemple de requête
 
 ```javascript
-// Récupérer tous les tests
-const response = await axios.get("http://localhost/.../Backend/api/tests.php");
+// --- Soumission ---
+const handleSubmit = async () => {
+  if (!formData.value.title || !selectedFile.value) {
+    toast.error("Le titre et la photo sont obligatoires !");
+    return;
+  }
 
-// Créer un test
-const formData = new FormData();
-formData.append("title", "Test bois");
-formData.append("image", file);
-formData.append("machine_id", 1);
-formData.append("material_id", 2);
-formData.append("speed", 800);
-formData.append("power", 50);
+  try {
+    const data = new FormData();
+    data.append("image", selectedFile.value);
 
-const response = await axios.post(
-  "http://localhost/.../Backend/api/tests.php",
-  formData,
-);
+    Object.keys(formData.value).forEach((key) => {
+      if (formData.value[key] !== null) data.append(key, formData.value[key]);
+    });
+
+    const res = await axios.post(`${API_BASE}/tests.php`, data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    if (res.status === 201 || res.data.success) {
+      toast.success("Test publié avec succès !");
+      setTimeout(() => router.push("/"), 1500);
+    }
+  } catch (err) {
+    toast.error("Erreur lors de la publication");
+    console.error(err);
+  }
+};
 ```
 
 ### Documentation Postman
@@ -499,7 +511,19 @@ Le projet utilise **GitHub Flow** avec branches feature :
 ```
 main (branche principale)
   │
-  └─► feature/frontend-complete (développement frontend)
+  ├───► feature/config (Fondations : PDO, Dotenv, CORS)
+  │
+  ├───► feature/user-auth (Authentification : Login, Register, BCRYPT)
+  │
+  ├───► feature/materials-management (Gestion du référentiel matériaux)
+  │
+  ├───► feature/test-management (Cœur métier : CRUD Tests & Transactions)
+  │
+  ├───► feature/test-images-params (Refactor : Gestion upload & paramètres avancés)
+  │
+  ├───► feature/comment-system (Interaction : CRUD Commentaires & Jointures)
+  │
+  └───► feature/frontend-complete (Interface Vue.js 3, Vite, Axios)
          │
          ├─ feat: initial setup
          ├─ feat: add components
