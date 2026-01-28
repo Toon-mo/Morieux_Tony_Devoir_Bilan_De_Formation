@@ -557,7 +557,7 @@ docs: documentation
 
 - [Axios](https://axios-http.com/)
 - [Vue Router](https://router.vuejs.org/)
-- [Vue3-Toastify](https://github.com/apvarun/vue3-toastify)
+- [Vue3-Toastify](https://vue3-toastify.js-bridge.com/get-started/introduction.html)
 
 ---
 
@@ -616,7 +616,7 @@ Les contributions sont les bienvenues !
 
 ## 📝 Licence
 
-Ce projet est sous licence **MIT** - voir le fichier [LICENSE](LICENSE) pour plus de détails.
+Ce projet est sous licence - voir le fichier [LICENSE](LICENSE) pour plus de détails.
 
 ---
 
